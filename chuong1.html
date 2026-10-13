@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Keiko 3D Project</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // 1. Khởi tạo Scene, Camera, Renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1, 6);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // 2. Load file ảnh bầu trời .EXR
+        new EXRLoader().load('./sky.exr', function (texture) {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            scene.background = texture;
+            scene.environment = texture;
+        });
+
+        // 3. Tạo mặt nước có lưới chi tiết (128x128) để làm sóng
+        const waterGeometry = new THREE.PlaneGeometry(40, 40, 128, 128);
+        const waterMaterial = new THREE.MeshStandardMaterial({
+            color: 0x073b4c,
+            roughness: 0.05,
+            metalness: 0.1,
+            transparent: true,
+            opacity: 0.92
+        });
+        const water = new THREE.Mesh(waterGeometry, waterMaterial);
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = -0.4;
+        scene.add(water);
+
+       // 4. Load mô hình cửa .glb
+        const gltfLoader = new GLTFLoader();
+        gltfLoader.load('./rojigateblendfin.glb', function (gltf) {
+            const doorModel = gltf.scene;
+            
+            // Đẩy cổng cao hơn một chút và xoay quay lưng ngược lại
+            doorModel.position.set(0, 0.2, 0); // Tăng số 0 lên 0.3 để cổng cao hơn mặt nước
+            doorModel.rotation.y = Math.PI;    // Quay 180 độ để cổng quay mặt ra sau
+
+            scene.add(doorModel);
+        }, undefined, function (error) {
+            console.error('Lỗi load file cửa:', error);
+        });
+        // 5. Vòng lặp animation tạo sóng trôi chảy qua lại
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const elapsedTime = clock.getElapsedTime();
+
+            const positionAttribute = waterGeometry.attributes.position;
+            for (let i = 0; i < positionAttribute.count; i++) {
+                const x = positionAttribute.getX(i);
+                const y = positionAttribute.getY(i);
+                
+                // Cộng/trừ elapsedTime trực tiếp vào x, y để các con sóng dịch chuyển chạy qua lại
+                const z = Math.sin((x + elapsedTime * 1.5) * 0.4) * Math.cos((y + elapsedTime * 0.5) * 0.4) * 0.06;
+                
+                positionAttribute.setZ(i, z);
+            }
+            positionAttribute.needsUpdate = true;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Xử lý co giãn màn hình
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
